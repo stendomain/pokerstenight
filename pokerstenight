@@ -1,0 +1,745 @@
+<title>Peluang Poker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Tata letak: satu kolom di HP. Di layar lebar, pemilih kartu di kiri dan hasil di atas "felt" hijau yang menempel di kanan. */
+:root {
+  --font-display: 'Bricolage Grotesque', 'Avenir Next', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --bg: #E6ECE8;
+  --surface: #F4F7F5;
+  --surface-2: #DAE3DE;
+  --fg: #13211B;
+  --muted: #526359;
+  --line: #C3CFC8;
+  --line-strong: #8FA196;
+  --accent: #1B6B4C;
+  --accent-fg: #FFFFFF;
+
+  --felt: #174D39;
+  --felt-fg: #EAF3EE;
+  --felt-muted: #A9C4B7;
+  --felt-line: rgba(234, 243, 238, 0.18);
+  --felt-field: rgba(234, 243, 238, 0.08);
+  --win: #6EDDA6;
+  --tie: #F0C560;
+  --lose: #F58E82;
+
+  --card-bg: #FBFBF7;
+  --card-ink: #17201C;
+  --card-red: #C2352C;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1511; --surface: #13211B; --surface-2: #1B2D25; --fg: #E4EEE8; --muted: #93A89D;
+    --line: #26392F; --line-strong: #4C6558; --accent: #4FBF8E; --accent-fg: #06150E;
+    --felt: #0F251C; --felt-line: rgba(234, 243, 238, 0.14);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1511; --surface: #13211B; --surface-2: #1B2D25; --fg: #E4EEE8; --muted: #93A89D;
+  --line: #26392F; --line-strong: #4C6558; --accent: #4FBF8E; --accent-fg: #06150E;
+  --felt: #0F251C; --felt-line: rgba(234, 243, 238, 0.14);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 var(--font-body);
+  padding-inline: 16px;
+  padding-block: 20px 56px;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.felt :focus-visible { outline-color: var(--felt-fg); }
+
+.wrap { max-width: 1060px; margin-inline: auto; }
+
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.eyebrow { margin: 0 0 4px; font: 500 12px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font: 800 clamp(32px, 8vw, 48px)/1 var(--font-display); letter-spacing: -0.025em; text-wrap: balance; }
+.top-actions { display: flex; gap: 8px; }
+.btn {
+  min-height: 40px; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line-strong); font-weight: 500; font-size: 14px;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--muted); padding-inline: 8px; min-height: 32px; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.btn.quiet:hover { color: var(--fg); background: transparent; }
+
+.lede { margin: 14px 0 0; max-width: 62ch; color: var(--muted); }
+.note { margin: 12px 0 0; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 8px; font-size: 14px; max-width: 62ch; }
+
+.layout { display: grid; gap: 16px; margin-top: 20px; align-items: start; }
+@media (min-width: 880px) {
+  .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 400px); gap: 24px; }
+  .results { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+}
+
+.inputs { display: grid; gap: 14px; min-width: 0; }
+.block { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; min-width: 0; }
+.block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.label { margin: 0; font: 600 12px/1.2 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.hint { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+.stage { margin: 12px 0 0; font: 500 13px/1.4 var(--font-mono); color: var(--muted); }
+
+/* Slot kartu */
+.hand { display: grid; grid-template-columns: repeat(2, minmax(0, 84px)); gap: 8px; }
+.board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 10px repeat(2, minmax(0, 1fr)); gap: 6px; max-width: 460px; }
+.board .slot[data-i="3"] { grid-column: 5; }
+.slot {
+  position: relative; display: grid; width: 100%; aspect-ratio: 5 / 7; padding: 0; cursor: pointer;
+  border-radius: 9px; border: 1.5px dashed var(--line-strong); background: transparent; color: var(--muted);
+  place-items: center; font: 500 11px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+}
+.slot:hover { background: var(--surface-2); }
+.slot[data-filled] { border: 1.5px solid rgba(0, 0, 0, 0.22); background: var(--card-bg); color: var(--card-ink); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12); }
+.slot[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 2px; }
+.face { display: grid; grid-template-rows: auto 1fr; width: 100%; height: 100%; padding: 6px 7px 8px; text-align: left; }
+.face .rk { font: 700 clamp(17px, 5vw, 24px)/1 var(--font-display); }
+.face .sg { align-self: center; justify-self: center; font-size: clamp(26px, 8vw, 40px); line-height: 1; }
+.red { color: var(--card-red); }
+.blk { color: var(--card-ink); }
+
+/* Dek 52 kartu */
+.deck { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 3px; }
+.cell {
+  display: grid; align-content: center; justify-items: center; gap: 1px; min-height: 44px; padding: 3px 0;
+  border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 5px; background: var(--card-bg); cursor: pointer;
+  font: 700 clamp(10px, 2.9vw, 14px)/1 var(--font-display);
+}
+.cell .sg { font-size: clamp(11px, 3.2vw, 15px); font-weight: 400; }
+.cell:hover { transform: translateY(-1px); }
+.cell[data-used] { opacity: 0.32; box-shadow: inset 0 0 0 2px var(--accent); }
+.cell[data-used="h"] { opacity: 0.5; }
+
+.seg { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+.seg button {
+  min-height: 42px; border-radius: 8px; border: 1px solid var(--line-strong); background: transparent; cursor: pointer;
+  font: 600 15px/1 var(--font-mono);
+}
+.seg button:hover { background: var(--surface-2); }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+
+/* Hasil di atas felt */
+.felt { background: var(--felt); color: var(--felt-fg); border-radius: 18px; padding: 20px 18px 22px; min-width: 0; }
+.felt .label { color: var(--felt-muted); }
+.res-empty { margin: 0; padding: 24px 4px; color: var(--felt-muted); max-width: 32ch; }
+.res-empty strong { display: block; margin-bottom: 4px; color: var(--felt-fg); font: 700 20px/1.2 var(--font-display); }
+.now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 14px; }
+.now .k { font: 500 12px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--felt-muted); }
+.now strong { font: 700 20px/1.2 var(--font-display); }
+.now .sub { font-size: 13px; color: var(--felt-muted); }
+
+.big { display: flex; align-items: baseline; gap: 10px; margin: 0; }
+.big .num { font: 800 clamp(56px, 16vw, 76px)/0.95 var(--font-display); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--win); }
+.big .cap { font: 500 13px/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--felt-muted); }
+.bar { display: flex; height: 10px; margin-top: 14px; border-radius: 5px; overflow: hidden; background: var(--felt-field); }
+.bar span { display: block; height: 100%; transition: flex-basis 0.25s ease; flex-basis: 0; flex-shrink: 0; }
+.bar .w { background: var(--win); }
+.bar .t { background: var(--tie); }
+.bar .l { background: var(--lose); }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
+.trio div { display: grid; gap: 2px; }
+.trio dt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--felt-muted); }
+.trio dt i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.trio dd { margin: 0; font: 600 20px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.eq { margin: 14px 0 0; font-size: 13px; color: var(--felt-muted); }
+.eq b { color: var(--felt-fg); font: 600 14px var(--font-mono); }
+
+.sec { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--felt-line); }
+.sec .label { margin-bottom: 10px; }
+.dist { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.dist li { display: grid; grid-template-columns: minmax(0, 9.5em) minmax(0, 1fr) 4.4em; gap: 10px; align-items: center; font-size: 13px; }
+.dist .nm { line-height: 1.25; }
+.dist .tag { margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: var(--felt-fg); color: var(--felt); font: 600 10px/1.4 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.dist .trk { height: 6px; border-radius: 3px; background: var(--felt-field); overflow: hidden; }
+.dist .fil { display: block; height: 100%; background: var(--felt-muted); transition: width 0.25s ease; }
+.dist li[data-now] .fil { background: var(--tie); }
+.dist .pc { text-align: right; font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; padding: 0; list-style: none; }
+.chip { padding: 3px 6px; border-radius: 5px; background: var(--card-bg); font: 600 13px/1.2 var(--font-mono); }
+.outline { margin: 0; font-size: 13px; color: var(--felt-muted); }
+.outline b { color: var(--felt-fg); font-family: var(--font-mono); }
+
+.pot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pot label { display: grid; gap: 4px; font-size: 12px; color: var(--felt-muted); }
+.pot input {
+  width: 100%; min-height: 42px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--felt-line);
+  background: var(--felt-field); color: var(--felt-fg); font: 500 16px var(--font-mono); font-variant-numeric: tabular-nums;
+}
+.verdict { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--felt-field); font-size: 14px; }
+.verdict b { font-family: var(--font-mono); }
+.verdict[data-v="good"] { box-shadow: inset 0 0 0 1.5px var(--win); }
+.verdict[data-v="bad"] { box-shadow: inset 0 0 0 1.5px var(--lose); }
+.verdict[data-v="edge"] { box-shadow: inset 0 0 0 1.5px var(--tie); }
+.method { margin: 18px 0 0; font-size: 12px; line-height: 1.45; color: var(--felt-muted); }
+
+.foot { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line); text-align: center; font: 500 12px/1.4 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bar span, .dist .fil, .cell:hover { transition: none; transform: none; }
+}
+</style>
+
+<main class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Texas Hold'em</p>
+      <h1>Peluang Poker</h1>
+    </div>
+    <div class="top-actions">
+      <button class="btn" type="button" id="btn-random">Acak kartu</button>
+      <button class="btn" type="button" id="btn-clear">Kosongkan semua</button>
+    </div>
+  </header>
+  <p class="lede">Pilih 2 kartu tangan dan sampai 5 kartu meja. Peluang menang, seri, dan kalah dihitung ulang setiap kartu atau jumlah lawan berubah.</p>
+  <p class="note" id="sample-note">Contoh awal: A♠ K♠ dengan flop Q♠ J♥ 2♠ melawan 1 lawan. Ganti kartunya atau kosongkan semua.</p>
+
+  <div class="layout">
+    <section class="inputs" aria-label="Pilihan kartu">
+      <div class="block">
+        <div class="block-head"><h2 class="label">Kartu tangan</h2></div>
+        <div class="hand" id="hand-slots"></div>
+      </div>
+
+      <div class="block">
+        <div class="block-head">
+          <h2 class="label">Kartu meja</h2>
+          <button class="btn quiet" type="button" id="btn-clear-board">Kosongkan meja</button>
+        </div>
+        <div class="board" id="board-slots"></div>
+        <p class="stage" id="stage"></p>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><h2 class="label">Pilih kartu</h2></div>
+        <p class="hint">Ketuk slot, lalu ketuk kartu. Ketuk kartu yang sudah terpakai untuk melepasnya.</p>
+        <div class="deck" id="deck"></div>
+      </div>
+
+      <div class="block">
+        <div class="block-head"><h2 class="label">Jumlah lawan</h2></div>
+        <div class="seg" id="opp"></div>
+      </div>
+    </section>
+
+    <section class="felt results" aria-label="Hasil perhitungan" id="results">
+      <p class="res-empty" id="res-empty"><strong>Pilih 2 kartu tangan</strong>Peluang muncul di sini begitu kedua kartu tangan terisi.</p>
+      <div id="res-body" hidden>
+        <p class="now" id="now"></p>
+        <p class="big"><span class="num" id="r-win">0%</span><span class="cap">peluang<br>menang</span></p>
+        <div class="bar" aria-hidden="true"><span class="w" id="b-w"></span><span class="t" id="b-t"></span><span class="l" id="b-l"></span></div>
+        <dl class="trio">
+          <div><dt><i style="background:var(--win)"></i>Menang</dt><dd id="v-w">0%</dd></div>
+          <div><dt><i style="background:var(--tie)"></i>Seri</dt><dd id="v-t">0%</dd></div>
+          <div><dt><i style="background:var(--lose)"></i>Kalah</dt><dd id="v-l">0%</dd></div>
+        </dl>
+        <p class="eq">Equity <b id="v-eq">0%</b> (menang ditambah bagian seri)</p>
+
+        <div class="sec" id="sec-dist">
+          <h2 class="label">Tangan akhir yang mungkin</h2>
+          <ul class="dist" id="dist"></ul>
+        </div>
+
+        <div class="sec" id="sec-outs" hidden>
+          <h2 class="label">Out</h2>
+          <ul class="chips" id="outs"></ul>
+          <p class="outline" id="outs-line"></p>
+        </div>
+
+        <div class="sec">
+          <h2 class="label">Pot odds</h2>
+          <div class="pot">
+            <label for="pot">Isi pot sekarang<input id="pot" type="number" inputmode="decimal" min="0" step="any" value="100"></label>
+            <label for="call">Harus dibayar<input id="call" type="number" inputmode="decimal" min="0" step="any" value="50"></label>
+          </div>
+          <p class="verdict" id="verdict"></p>
+        </div>
+
+        <p class="method" id="method"></p>
+      </div>
+      <div class="sr" id="sr" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <footer class="foot">© RESERVED BY STENIGHT</footer>
+</main>
+
+<script>'use strict';
+/* Mesin poker Texas Hold'em.
+   Kartu = 0..51, id = suit*13 + rank. rank 0 = '2' ... 12 = 'A'. suit 0..3. */
+
+var CATEGORIES = ['High Card', 'Pair', 'Two Pair', 'Three of a Kind', 'Straight', 'Flush', 'Full House', 'Four of a Kind', 'Straight Flush'];
+
+function straightHigh(m) {
+  for (var h = 12; h >= 4; h--) {
+    var w = 0x1F << (h - 4);
+    if ((m & w) === w) return h;
+  }
+  if ((m & 0x100F) === 0x100F) return 3; /* A-2-3-4-5 */
+  return -1;
+}
+
+/* Skor 5-7 kartu. Skor lebih besar = tangan lebih kuat. Kategori = skor >> 20. */
+function evaluate(cs, n) {
+  var rc = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], sc = [0, 0, 0, 0], sm = [0, 0, 0, 0];
+  var mask = 0, i, r, s;
+  for (i = 0; i < n; i++) {
+    r = cs[i] % 13; s = (cs[i] / 13) | 0;
+    rc[r]++; sc[s]++; sm[s] |= 1 << r; mask |= 1 << r;
+  }
+  var fs = -1;
+  for (s = 0; s < 4; s++) if (sc[s] >= 5) fs = s;
+  var sh;
+  if (fs >= 0) {
+    sh = straightHigh(sm[fs]);
+    if (sh >= 0) return (8 << 20) | (sh << 16);
+  }
+  var quad = -1, t1 = -1, t2 = -1, p1 = -1, p2 = -1, c;
+  for (r = 12; r >= 0; r--) {
+    c = rc[r];
+    if (c === 4) quad = r;
+    else if (c === 3) { if (t1 < 0) t1 = r; else if (t2 < 0) t2 = r; }
+    else if (c === 2) { if (p1 < 0) p1 = r; else if (p2 < 0) p2 = r; }
+  }
+  var k, out, shift, cnt;
+  if (quad >= 0) {
+    k = -1;
+    for (r = 12; r >= 0; r--) if (r !== quad && rc[r] > 0) { k = r; break; }
+    return (7 << 20) | (quad << 16) | (k << 12);
+  }
+  if (t1 >= 0 && (t2 >= 0 || p1 >= 0)) {
+    var pr = t2 > p1 ? t2 : p1;
+    return (6 << 20) | (t1 << 16) | (pr << 12);
+  }
+  if (fs >= 0) {
+    out = 5 << 20; shift = 16; cnt = 0;
+    for (r = 12; r >= 0 && cnt < 5; r--) if (sm[fs] & (1 << r)) { out |= r << shift; shift -= 4; cnt++; }
+    return out;
+  }
+  sh = straightHigh(mask);
+  if (sh >= 0) return (4 << 20) | (sh << 16);
+  if (t1 >= 0) {
+    out = (3 << 20) | (t1 << 16); shift = 12; cnt = 0;
+    for (r = 12; r >= 0 && cnt < 2; r--) if (r !== t1 && rc[r] > 0) { out |= r << shift; shift -= 4; cnt++; }
+    return out;
+  }
+  if (p2 >= 0) {
+    out = (2 << 20) | (p1 << 16) | (p2 << 12);
+    for (r = 12; r >= 0; r--) if (r !== p1 && r !== p2 && rc[r] > 0) { out |= r << 8; break; }
+    return out;
+  }
+  if (p1 >= 0) {
+    out = (1 << 20) | (p1 << 16); shift = 12; cnt = 0;
+    for (r = 12; r >= 0 && cnt < 3; r--) if (r !== p1 && rc[r] > 0) { out |= r << shift; shift -= 4; cnt++; }
+    return out;
+  }
+  out = 0; shift = 16; cnt = 0;
+  for (r = 12; r >= 0 && cnt < 5; r--) if (rc[r] > 0) { out |= r << shift; shift -= 4; cnt++; }
+  return out;
+}
+
+function remaining(used) {
+  var d = [], u = {}, i;
+  for (i = 0; i < used.length; i++) u[used[i]] = 1;
+  for (i = 0; i < 52; i++) if (!u[i]) d.push(i);
+  return d;
+}
+
+function zeros9() { return [0, 0, 0, 0, 0, 0, 0, 0, 0]; }
+
+/* Hitungan eksak untuk 1 lawan bila papan sudah 4 atau 5 kartu. */
+function exactVsOne(hero, board) {
+  var deck = remaining(hero.concat(board));
+  var need = 5 - board.length;
+  var h7 = new Array(7), o7 = new Array(7), i, w = 0, t = 0, l = 0, n = 0, cat = zeros9();
+  h7[0] = hero[0]; h7[1] = hero[1];
+  for (i = 0; i < board.length; i++) { h7[2 + i] = board[i]; o7[2 + i] = board[i]; }
+  function pairs(hs, skip) {
+    for (var a = 0; a < deck.length; a++) {
+      if (a === skip) continue;
+      o7[0] = deck[a];
+      for (var b = a + 1; b < deck.length; b++) {
+        if (b === skip) continue;
+        o7[1] = deck[b];
+        var os = evaluate(o7, 7);
+        n++;
+        if (hs > os) w++; else if (hs === os) t++; else l++;
+        cat[hs >> 20]++;
+      }
+    }
+  }
+  if (need === 0) {
+    pairs(evaluate(h7, 7), -1);
+  } else {
+    for (var r = 0; r < deck.length; r++) {
+      h7[6] = deck[r]; o7[6] = deck[r];
+      pairs(evaluate(h7, 7), r);
+    }
+  }
+  var res = { n: n, w: w / n, t: t / n, l: l / n, eq: (w + t / 2) / n, cat: [], exact: true, raw: { w: w, t: t, l: l } };
+  for (i = 0; i < 9; i++) res.cat.push(cat[i] / n);
+  return res;
+}
+
+/* Simulasi Monte Carlo: lawan memegang kartu acak. */
+function makeSim(hero, board, opp) {
+  var deck = remaining(hero.concat(board));
+  var need = 5 - board.length;
+  var total = need + 2 * opp;
+  var h7 = new Array(7), o7 = new Array(7), i;
+  h7[0] = hero[0]; h7[1] = hero[1];
+  for (i = 0; i < board.length; i++) h7[2 + i] = board[i];
+  var st = { n: 0, w: 0, t: 0, l: 0, eq: 0, cat: zeros9() };
+  return {
+    step: function (k) {
+      for (var it = 0; it < k; it++) {
+        for (var a = 0; a < total; a++) {
+          var j = a + ((Math.random() * (deck.length - a)) | 0);
+          var tmp = deck[a]; deck[a] = deck[j]; deck[j] = tmp;
+        }
+        for (a = 0; a < need; a++) h7[2 + board.length + a] = deck[a];
+        for (a = 2; a < 7; a++) o7[a] = h7[a];
+        var hs = evaluate(h7, 7), best = -1, tied = 0;
+        for (var o = 0; o < opp; o++) {
+          o7[0] = deck[need + 2 * o]; o7[1] = deck[need + 2 * o + 1];
+          var os = evaluate(o7, 7);
+          if (os > best) { best = os; tied = 1; } else if (os === best) tied++;
+        }
+        st.n++;
+        st.cat[hs >> 20]++;
+        if (hs > best) { st.w++; st.eq += 1; }
+        else if (hs === best) { st.t++; st.eq += 1 / (1 + tied); }
+        else st.l++;
+      }
+    },
+    n: function () { return st.n; },
+    result: function () {
+      var n = st.n || 1, cat = [];
+      for (var q = 0; q < 9; q++) cat.push(st.cat[q] / n);
+      return { n: st.n, w: st.w / n, t: st.t / n, l: st.l / n, eq: st.eq / n, cat: cat, exact: false };
+    }
+  };
+}
+
+/* Out: kartu berikutnya yang menaikkan kategori tangan, dan kenaikan itu memakai kartu tangan Anda. */
+function findOuts(hero, board) {
+  var deck = remaining(hero.concat(board));
+  var all = hero.concat(board);
+  var base = evaluate(all, all.length) >> 20;
+  var outs = [];
+  for (var i = 0; i < deck.length; i++) {
+    var c = deck[i];
+    var a = evaluate(all.concat([c]), all.length + 1) >> 20;
+    var b = evaluate(board.concat([c]), board.length + 1) >> 20;
+    if (a > base && a > b) outs.push(c);
+  }
+  outs.sort(function (x, y) { return (y % 13) - (x % 13) || ((x / 13) | 0) - ((y / 13) | 0); });
+  return { outs: outs, left: deck.length };
+}
+
+if (typeof module !== 'undefined') {
+  module.exports = { CATEGORIES: CATEGORIES, evaluate: evaluate, exactVsOne: exactVsOne, makeSim: makeSim, findOuts: findOuts, remaining: remaining };
+}
+</script>
+<script>
+(function () {
+  'use strict';
+  var SUIT_CH = ['♠', '♥', '♦', '♣'];
+  var SUIT_NAME = ['Sekop', 'Hati', 'Wajik', 'Keriting'];
+  var RANK_TXT = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+  var RANK_CH = '23456789TJQKA';
+  var SUIT_ROWS = [0, 1, 3, 2]; /* sekop, hati, keriting, wajik: warna selang-seling */
+  var TOTAL_SIMS = 40000, CHUNK = 4000;
+
+  var state = {
+    hand: [12, 11],               /* A♠ K♠ */
+    board: [10, 22, 0, null, null], /* Q♠ J♥ 2♠ */
+    sel: { z: 'b', i: 3 },
+    opp: 1, pot: 100, call: 50
+  };
+  var last = null, runId = 0, timer = null;
+
+  function $(id) { return document.getElementById(id); }
+  function isRed(c) { var s = (c / 13) | 0; return s === 1 || s === 2; }
+  function label(c) { return RANK_TXT[c % 13] + SUIT_CH[(c / 13) | 0]; }
+  function name(c) { return RANK_TXT[c % 13] + ' ' + SUIT_NAME[(c / 13) | 0]; }
+  function pct(v, d) {
+    var x = v * 100;
+    if (d === undefined) d = 1;
+    if (x > 0 && x < 0.05 && d === 1) return '<0,1%';
+    return x.toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d }) + '%';
+  }
+  function num(v) { return v.toLocaleString('id-ID'); }
+
+  /* ---------- slot ---------- */
+  var slotEls = [];
+  function makeSlot(z, i, text) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'slot'; b.dataset.i = i; b.dataset.text = text;
+    b.addEventListener('click', function () { onSlot(z, i); });
+    slotEls.push({ z: z, i: i, el: b });
+    return b;
+  }
+  function buildSlots() {
+    var hs = $('hand-slots'), bs = $('board-slots'), i;
+    for (i = 0; i < 2; i++) hs.appendChild(makeSlot('h', i, 'Tangan ' + (i + 1)));
+    var names = ['Flop', 'Flop', 'Flop', 'Turn', 'River'];
+    for (i = 0; i < 5; i++) bs.appendChild(makeSlot('b', i, names[i]));
+  }
+  function getVal(z, i) { return z === 'h' ? state.hand[i] : state.board[i]; }
+  function setVal(z, i, v) { if (z === 'h') state.hand[i] = v; else state.board[i] = v; }
+  function order() {
+    return [{ z: 'h', i: 0 }, { z: 'h', i: 1 }, { z: 'b', i: 0 }, { z: 'b', i: 1 }, { z: 'b', i: 2 }, { z: 'b', i: 3 }, { z: 'b', i: 4 }];
+  }
+  function owners() {
+    var m = {};
+    order().forEach(function (s) { var v = getVal(s.z, s.i); if (v !== null) m[v] = s; });
+    return m;
+  }
+  function advance() {
+    var o = order(), start = 0, k;
+    for (k = 0; k < o.length; k++) if (o[k].z === state.sel.z && o[k].i === state.sel.i) start = k;
+    for (k = 1; k <= o.length; k++) {
+      var s = o[(start + k) % o.length];
+      if (getVal(s.z, s.i) === null) { state.sel = { z: s.z, i: s.i }; return; }
+    }
+  }
+
+  function renderSlots() {
+    slotEls.forEach(function (s) {
+      var v = getVal(s.z, s.i), el = s.el;
+      var selected = state.sel.z === s.z && state.sel.i === s.i;
+      el.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      if (v === null) {
+        el.removeAttribute('data-filled');
+        el.textContent = el.dataset.text;
+        el.setAttribute('aria-label', el.dataset.text + ', kosong');
+      } else {
+        el.setAttribute('data-filled', '');
+        el.innerHTML = '<span class="face ' + (isRed(v) ? 'red' : 'blk') + '"><span class="rk">' + RANK_TXT[v % 13] + '</span><span class="sg">' + SUIT_CH[(v / 13) | 0] + '</span></span>';
+        el.setAttribute('aria-label', el.dataset.text + ': ' + name(v));
+      }
+    });
+  }
+
+  /* ---------- dek ---------- */
+  var cellEls = {};
+  function buildDeck() {
+    var d = $('deck');
+    SUIT_ROWS.forEach(function (s) {
+      for (var r = 12; r >= 0; r--) {
+        var c = s * 13 + r;
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cell ' + (isRed(c) ? 'red' : 'blk');
+        b.innerHTML = '<span>' + RANK_TXT[r] + '</span><span class="sg">' + SUIT_CH[s] + '</span>';
+        b.setAttribute('aria-label', name(c));
+        b.addEventListener('click', function (card) { return function () { pick(card); }; }(c));
+        cellEls[c] = b;
+        d.appendChild(b);
+      }
+    });
+  }
+  function renderDeck() {
+    var own = owners();
+    for (var c = 0; c < 52; c++) {
+      var el = cellEls[c], o = own[c];
+      if (o) {
+        el.setAttribute('data-used', o.z);
+        el.setAttribute('aria-label', name(c) + ', dipakai di ' + (o.z === 'h' ? 'tangan' : 'meja') + ', ketuk untuk melepas');
+      } else {
+        el.removeAttribute('data-used');
+        el.setAttribute('aria-label', name(c));
+      }
+    }
+  }
+
+  function renderOpp() {
+    var box = $('opp');
+    if (!box.children.length) {
+      for (var n = 1; n <= 8; n++) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.textContent = n; b.setAttribute('aria-label', n + ' lawan');
+        b.addEventListener('click', function (k) { return function () { state.opp = k; changed(); }; }(n));
+        box.appendChild(b);
+      }
+    }
+    Array.prototype.forEach.call(box.children, function (b, i) { b.setAttribute('aria-pressed', state.opp === i + 1 ? 'true' : 'false'); });
+  }
+
+  function boardCards() { return state.board.filter(function (v) { return v !== null; }); }
+  function stageName(n) {
+    return n === 0 ? 'Preflop' : n === 3 ? 'Flop' : n === 4 ? 'Turn' : n === 5 ? 'River' : 'Flop belum lengkap';
+  }
+  function renderStage() {
+    var n = boardCards().length, used = n + state.hand.filter(function (v) { return v !== null; }).length;
+    $('stage').textContent = stageName(n) + ' · ' + n + ' kartu di meja · sisa dek ' + (52 - used) + ' kartu';
+  }
+
+  /* ---------- aksi ---------- */
+  function onSlot(z, i) {
+    var same = state.sel.z === z && state.sel.i === i;
+    if (same && getVal(z, i) !== null) setVal(z, i, null);
+    else state.sel = { z: z, i: i };
+    changed();
+  }
+  function pick(c) {
+    var o = owners()[c];
+    if (o) { setVal(o.z, o.i, null); state.sel = { z: o.z, i: o.i }; }
+    else { setVal(state.sel.z, state.sel.i, c); advance(); }
+    changed();
+  }
+  function firstEmpty() {
+    var o = order();
+    for (var k = 0; k < o.length; k++) if (getVal(o[k].z, o[k].i) === null) return { z: o[k].z, i: o[k].i };
+    return { z: 'h', i: 0 };
+  }
+  function changed() {
+    $('sample-note').hidden = true;
+    renderAll();
+    schedule();
+  }
+  function renderAll() { renderSlots(); renderDeck(); renderOpp(); renderStage(); }
+
+  $('btn-clear').addEventListener('click', function () {
+    state.hand = [null, null]; state.board = [null, null, null, null, null]; state.sel = { z: 'h', i: 0 }; changed();
+  });
+  $('btn-clear-board').addEventListener('click', function () {
+    state.board = [null, null, null, null, null]; state.sel = firstEmpty(); changed();
+  });
+  $('btn-random').addEventListener('click', function () {
+    var d = [], i;
+    for (i = 0; i < 52; i++) d.push(i);
+    for (i = 0; i < 5; i++) { var j = i + ((Math.random() * (52 - i)) | 0), t = d[i]; d[i] = d[j]; d[j] = t; }
+    state.hand = [d[0], d[1]]; state.board = [d[2], d[3], d[4], null, null]; state.sel = { z: 'b', i: 3 }; changed();
+  });
+  $('pot').addEventListener('input', function () { state.pot = parseFloat(this.value) || 0; renderPot(); });
+  $('call').addEventListener('input', function () { state.call = parseFloat(this.value) || 0; renderPot(); });
+
+  /* ---------- perhitungan ---------- */
+  function schedule() {
+    runId++;
+    clearTimeout(timer);
+    timer = setTimeout(recalc, 60);
+  }
+  function recalc() {
+    var id = ++runId;
+    var h = state.hand;
+    if (h[0] === null || h[1] === null) {
+      last = null;
+      $('res-empty').hidden = false; $('res-body').hidden = true;
+      return;
+    }
+    $('res-empty').hidden = true; $('res-body').hidden = false;
+    var bd = boardCards(), hero = [h[0], h[1]];
+    renderNow(hero, bd);
+    renderOuts(hero, bd);
+    if (state.opp === 1 && bd.length >= 4) {
+      var ex = exactVsOne(hero, bd);
+      show(ex, true);
+      return;
+    }
+    var sim = makeSim(hero, bd, state.opp);
+    (function tick() {
+      if (id !== runId) return;
+      sim.step(CHUNK);
+      var done = sim.n() >= TOTAL_SIMS;
+      show(sim.result(), done);
+      if (!done) setTimeout(tick, 0);
+    })();
+  }
+
+  function handNotation(a, b) {
+    var ra = a % 13, rb = b % 13, sa = (a / 13) | 0, sb = (b / 13) | 0;
+    if (ra === rb) return { code: RANK_CH[ra] + RANK_CH[rb], text: 'pocket pair' };
+    var hi = ra > rb ? ra : rb, lo = ra > rb ? rb : ra;
+    return { code: RANK_CH[hi] + RANK_CH[lo] + (sa === sb ? 's' : 'o'), text: sa === sb ? 'suited' : 'offsuit' };
+  }
+  function renderNow(hero, bd) {
+    var el = $('now'), hn = handNotation(hero[0], hero[1]);
+    if (bd.length >= 3) {
+      var all = hero.concat(bd), c = evaluate(all, all.length) >> 20;
+      el.innerHTML = '<span class="k">' + (bd.length === 5 ? 'Tangan akhir' : 'Tangan sekarang') + '</span><strong>' + CATEGORIES[c] + '</strong><span class="sub">' + stageName(bd.length) + ' · ' + hn.code + '</span>';
+    } else {
+      el.innerHTML = '<span class="k">Tangan awal</span><strong>' + hn.code + '</strong><span class="sub">' + hn.text + ' · ' + stageName(bd.length) + '</span>';
+    }
+    el.dataset.cat = bd.length >= 3 ? (evaluate(hero.concat(bd), hero.length + bd.length) >> 20) : -1;
+  }
+  function renderOuts(hero, bd) {
+    var sec = $('sec-outs');
+    if (bd.length !== 3 && bd.length !== 4) { sec.hidden = true; return; }
+    var f = findOuts(hero, bd);
+    sec.hidden = false;
+    var ul = $('outs');
+    ul.innerHTML = '';
+    f.outs.forEach(function (c) {
+      var li = document.createElement('li');
+      li.className = 'chip ' + (isRed(c) ? 'red' : 'blk');
+      li.textContent = label(c);
+      li.setAttribute('aria-label', name(c));
+      ul.appendChild(li);
+    });
+    $('outs-line').innerHTML = f.outs.length
+      ? '<b>' + f.outs.length + ' out</b> dari ' + f.left + ' kartu tersisa. Peluang salah satunya muncul di kartu berikutnya: <b>' + pct(f.outs.length / f.left) + '</b>. Out ini menaikkan tangan Anda, tetapi belum tentu cukup mengalahkan lawan.'
+      : 'Tidak ada kartu yang menaikkan kategori tangan Anda di kartu berikutnya.';
+  }
+
+  function show(res, done) {
+    last = res;
+    $('r-win').textContent = pct(res.w);
+    $('v-w').textContent = pct(res.w);
+    $('v-t').textContent = pct(res.t);
+    $('v-l').textContent = pct(res.l);
+    $('v-eq').textContent = pct(res.eq);
+    $('b-w').style.flexBasis = (res.w * 100) + '%';
+    $('b-t').style.flexBasis = (res.t * 100) + '%';
+    $('b-l').style.flexBasis = (res.l * 100) + '%';
+
+    var nowCat = parseInt($('now').dataset.cat, 10), ul = $('dist'), rows = '';
+    for (var c = 8; c >= 0; c--) {
+      var v = res.cat[c];
+      if (v <= 0.0005 && c !== nowCat) continue;
+      rows += '<li' + (c === nowCat ? ' data-now' : '') + '><span class="nm">' + CATEGORIES[c] + (c === nowCat ? '<span class="tag">kini</span>' : '') + '</span><span class="trk"><span class="fil" style="width:' + Math.max(v * 100, v > 0 ? 1 : 0) + '%"></span></span><span class="pc">' + pct(v) + '</span></li>';
+    }
+    ul.innerHTML = rows;
+
+    var m = $('method');
+    if (res.exact) {
+      m.textContent = 'Dihitung eksak dari semua ' + num(res.n) + ' kemungkinan kartu lawan' + (boardCards().length === 4 ? ' dan kartu river' : '') + '. Lawan dianggap memegang kartu acak.';
+    } else if (done) {
+      m.textContent = 'Simulasi ' + num(res.n) + ' putaran dengan ' + state.opp + ' lawan yang memegang kartu acak. Margin kesalahan sekitar ±0,5 poin persentase.';
+    } else {
+      m.textContent = 'Menghitung… ' + num(res.n) + ' dari ' + num(TOTAL_SIMS) + ' putaran.';
+    }
+    renderPot();
+    if (done) $('sr').textContent = 'Menang ' + pct(res.w) + ', seri ' + pct(res.t) + ', kalah ' + pct(res.l) + '.';
+  }
+
+  function renderPot() {
+    var v = $('verdict');
+    if (!last) { v.textContent = ''; return; }
+    var pot = state.pot, call = state.call;
+    if (call <= 0) { v.removeAttribute('data-v'); v.textContent = 'Tidak ada taruhan yang harus dibayar. Check atau bet sesuai strategi Anda.'; return; }
+    var need = call / (pot + call), eq = last.eq;
+    var verdict = eq > need + 0.02 ? 'good' : eq < need - 0.02 ? 'bad' : 'edge';
+    var text = verdict === 'good' ? 'Call menguntungkan secara hitungan.' : verdict === 'bad' ? 'Call merugi secara hitungan.' : 'Hampir impas.';
+    v.setAttribute('data-v', verdict);
+    v.innerHTML = 'Anda butuh equity minimal <b>' + pct(need) + '</b>, equity Anda <b>' + pct(eq) + '</b>. ' + text + ' Hitungan ini belum memasukkan taruhan di putaran berikutnya.';
+  }
+
+  buildSlots();
+  buildDeck();
+  renderAll();
+  recalc();
+})();
+</script>
